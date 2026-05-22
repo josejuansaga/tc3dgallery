@@ -17,6 +17,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── Config from environment (defaults = Windows local dev) ────────────────────
 GALLERY_DIR   = os.environ.get('GALLERY_DIR',   BASE_DIR)
+DATA_DIR      = os.environ.get('DATA_DIR',      GALLERY_DIR)
 TRABAJOS_DIR  = os.environ.get('TRABAJOS_DIR',  r"Z:\OneDriveTC3D\Trabajos")
 TRABAJOS_DIR2 = os.environ.get('TRABAJOS_DIR2', '')
 PORT         = int(os.environ.get('PORT', 8765))
@@ -27,19 +28,21 @@ MEDIA_HASH_SECRET = os.environ.get(
     f'{GALLERY_DIR}|{TRABAJOS_DIR}|{TRABAJOS_DIR2 or ""}'
 )
 
-USERS_FILE = os.path.join(GALLERY_DIR, 'users.json')
-SHARED_LINKS_FILE = os.path.join(GALLERY_DIR, 'shared_links.json')
-ROTATIONS_FILE = os.path.join(GALLERY_DIR, 'image_rotations.json')
-PROJECT_BILLING_FILE = os.path.join(GALLERY_DIR, 'project_billing.json')
-SOCIAL_VISIBILITY_FILE = os.path.join(GALLERY_DIR, 'social_visibility.json')
-FAVORITES_FILE = os.path.join(GALLERY_DIR, 'favorites.json')
-THUMB_DIR  = os.path.join(GALLERY_DIR, 'thumbs')
+USERS_FILE = os.path.join(DATA_DIR, 'users.json')
+SHARED_LINKS_FILE = os.path.join(DATA_DIR, 'shared_links.json')
+ROTATIONS_FILE = os.path.join(DATA_DIR, 'image_rotations.json')
+PROJECT_BILLING_FILE = os.path.join(DATA_DIR, 'project_billing.json')
+SOCIAL_VISIBILITY_FILE = os.path.join(DATA_DIR, 'social_visibility.json')
+FAVORITES_FILE = os.path.join(DATA_DIR, 'favorites.json')
+THUMB_DIR  = os.path.join(DATA_DIR, 'thumbs')
 _sessions      = {}   # token → {username, role, expires}
 _gallery_cache = {'data': None, 'mtime': 0}
 
 # ── Export state (one export at a time) ────────────────────────────────────────
 export_lock   = threading.Lock()
 export_status = {'running': False, 'done': 0, 'total': 0, 'errors': [], 'output_dir': ''}
+
+os.makedirs(DATA_DIR, exist_ok=True)
 
 
 def url_to_filepath(url):
