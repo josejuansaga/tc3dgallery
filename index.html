@@ -2150,6 +2150,26 @@ function favoriteProjectKey(projectOrCompany, projectName) {
   return `${projectOrCompany}||${projectName}`;
 }
 
+function favoriteStorageKey() {
+  return `tc3d-favorites:${window.GALLERY_USER?.username || 'guest'}`;
+}
+
+function saveFavoritesToStorage() {
+  try {
+    localStorage.setItem(favoriteStorageKey(), JSON.stringify(Array.from(favoriteKeys)));
+  } catch (e) {}
+}
+
+function loadFavoritesFromStorage() {
+  try {
+    const raw = localStorage.getItem(favoriteStorageKey());
+    const values = JSON.parse(raw || '[]');
+    return Array.isArray(values) ? values.map(value => String(value)) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 function isFavoriteProject(project) {
   return favoriteKeys.has(favoriteProjectKey(project));
 }
@@ -2165,18 +2185,29 @@ function countFavoriteProjects() {
 }
 
 async function loadFavorites() {
+  favoriteKeys.clear();
+  loadFavoritesFromStorage().forEach(key => favoriteKeys.add(String(key)));
   try {
     const res = await fetch('/api/favorites');
     const data = await res.json().catch(() => ({}));
-    favoriteKeys.clear();
-    (data.favorites || []).forEach(key => favoriteKeys.add(String(key)));
+    if (res.ok) {
+      favoriteKeys.clear();
+      (data.favorites || []).forEach(key => favoriteKeys.add(String(key)));
+      saveFavoritesToStorage();
+    }
   } catch (e) {
-    favoriteKeys.clear();
+    saveFavoritesToStorage();
   }
 }
 
 async function toggleFavorite(project, btn) {
   const key = favoriteProjectKey(project);
+  const wasFavorite = favoriteKeys.has(key);
+  if (wasFavorite) favoriteKeys.delete(key);
+  else favoriteKeys.add(key);
+  saveFavoritesToStorage();
+  buildSidebar();
+  renderGrid();
   btn.disabled = true;
   try {
     const res = await fetch('/api/favorite-toggle', {
@@ -2188,10 +2219,11 @@ async function toggleFavorite(project, btn) {
     if (!res.ok || data.error) throw new Error(data.error || 'No se pudo guardar favorito');
     favoriteKeys.clear();
     (data.favorites || []).forEach(entry => favoriteKeys.add(String(entry)));
+    saveFavoritesToStorage();
     buildSidebar();
     renderGrid();
   } catch (e) {
-    alert('No se pudo guardar favorito: ' + e.message);
+    console.warn('No se pudo guardar favorito en servidor, se conserva en este navegador.', e);
   } finally {
     btn.disabled = false;
   }
