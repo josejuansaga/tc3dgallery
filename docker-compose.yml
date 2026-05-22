@@ -1,0 +1,33 @@
+services:
+
+  gallery:
+    image: python:3.11-slim
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install --quiet pillow watchdog &&
+             python server.py"
+    ports:
+      - "8765:8765"
+    volumes:
+      # Código de la galería — carpeta donde está este archivo
+      - .:/app
+      - /volume1/3D/OneDriveTC3D/Trabajos:/trabajos:ro
+      - /volume1/3D/Trabajos:/trabajos2:ro
+    environment:
+      - GALLERY_DIR=/app
+      - TRABAJOS_DIR=/trabajos
+      - TRABAJOS_DIR2=/trabajos2
+      - GALLERY_PASSWORD=
+      # ← Pon aquí tu contraseña, p.ej: GALLERY_PASSWORD=secreto123
+
+  # Cloudflare Tunnel — acceso externo sin abrir puertos en el router
+  # Descomenta y pon tu token cuando lo tengas
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run
+  #   environment:
+  #     - TUNNEL_TOKEN=pega_aqui_tu_token
+  #   depends_on:
+  #     - gallery

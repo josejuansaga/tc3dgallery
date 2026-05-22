@@ -1,0 +1,15 @@
+__pycache__/
+thumbs/
+Backup/
+
+.env
+*.pyc
+
+users.json
+shared_links.json
+image_rotations.json
+project_billing.json
+social_visibility.json
+
+data.js
+data.js.bak
