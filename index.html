@@ -665,6 +665,37 @@
     backdrop-filter: blur(4px);
   }
 
+  .card-fav-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px;
+    background: rgba(0,0,0,.45);
+    color: rgba(255,255,255,.9);
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: transform .18s, border-color .18s, background .18s, color .18s;
+  }
+  .card-fav-btn:hover {
+    transform: scale(1.06);
+    border-color: var(--accent);
+    color: #fff1c8;
+  }
+  .card-fav-btn.active {
+    background: rgba(185,154,88,.22);
+    border-color: rgba(185,154,88,.72);
+    color: #f7d36b;
+  }
+
   .card-info {
     position: absolute;
     left: 14px;
@@ -2020,6 +2051,7 @@ let activeCompany = null;
 let activeType    = null;
 let activeYear    = null;
 let activeRecent  = false;
+let activeFavorites = false;
 let activeSort    = 'recent';
 let galleryView   = 'normal';
 let searchQuery   = '';
@@ -2029,6 +2061,7 @@ let lbIndex = 0;
 let cardObserver, projObserver;
 let billingPanelVisible = false;
 const projectDetailCache = new Map();
+const favoriteKeys = new Set();
 
 // Selection
 let selectionMode  = false;
@@ -2095,6 +2128,60 @@ function projectCacheKey(projectOrCompany, projectName) {
     return `${projectOrCompany.company}::${projectOrCompany.name}`;
   }
   return `${projectOrCompany}::${projectName}`;
+}
+
+function favoriteProjectKey(projectOrCompany, projectName) {
+  if (typeof projectOrCompany === 'object' && projectOrCompany) {
+    return `${projectOrCompany.company}||${projectOrCompany.name}`;
+  }
+  return `${projectOrCompany}||${projectName}`;
+}
+
+function isFavoriteProject(project) {
+  return favoriteKeys.has(favoriteProjectKey(project));
+}
+
+function countFavoriteProjects() {
+  let total = 0;
+  GALLERY_DATA.forEach(company => {
+    company.projects.forEach(project => {
+      if (isFavoriteProject({ ...project, company: company.company })) total += 1;
+    });
+  });
+  return total;
+}
+
+async function loadFavorites() {
+  try {
+    const res = await fetch('/api/favorites');
+    const data = await res.json().catch(() => ({}));
+    favoriteKeys.clear();
+    (data.favorites || []).forEach(key => favoriteKeys.add(String(key)));
+  } catch (e) {
+    favoriteKeys.clear();
+  }
+}
+
+async function toggleFavorite(project, btn) {
+  const key = favoriteProjectKey(project);
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/favorite-toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: project.company, project: project.name })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) throw new Error(data.error || 'No se pudo guardar favorito');
+    favoriteKeys.clear();
+    (data.favorites || []).forEach(entry => favoriteKeys.add(String(entry)));
+    buildSidebar();
+    renderGrid();
+  } catch (e) {
+    alert('No se pudo guardar favorito: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function getProjectCover(project) {
@@ -2178,7 +2265,8 @@ const SORT_OPTIONS = [
 ];
 
 // ── Init ──────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadFavorites();
   const totalProjects = GALLERY_DATA.reduce((s, c) => s + c.projects.length, 0);
   document.getElementById('total-stats').textContent =
     `${GALLERY_DATA.length} empresas · ${totalProjects} proyectos`;
@@ -2225,6 +2313,13 @@ function buildSidebar() {
   const list = document.getElementById('company-list');
   list.innerHTML = '';
 
+  const favoriteCount = countFavoriteProjects();
+  const favoriteBtn = document.createElement('button');
+  favoriteBtn.className = 'company-btn' + (activeFavorites ? ' active' : '');
+  favoriteBtn.innerHTML = `<span class="name">★ Favoritos</span><span class="count">${favoriteCount}</span>`;
+  favoriteBtn.onclick = () => filterFavorites();
+  list.appendChild(favoriteBtn);
+
   // Últimos renders button
   const recentProjects = getRecentProjects();
   if (recentProjects.length) {
@@ -2237,7 +2332,7 @@ function buildSidebar() {
 
   // All button
   const allBtn = document.createElement('button');
-  allBtn.className = 'company-btn' + (!activeCompany && !activeRecent ? ' active' : '');
+  allBtn.className = 'company-btn' + (!activeCompany && !activeRecent && !activeFavorites ? ' active' : '');
   const totalP = GALLERY_DATA.reduce((s, c) => s + c.projects.length, 0);
   allBtn.innerHTML = `<span class="name">Todos los proyectos</span><span class="count">${totalP}</span>`;
   allBtn.onclick = () => filterCompany(null);
@@ -2305,6 +2400,7 @@ function getRecentProjects() {
 function filterRecent() {
   closeSidebar();
   activeRecent  = true;
+  activeFavorites = false;
   activeCompany = null;
   activeType    = null;
   activeYear    = null;
@@ -2317,9 +2413,26 @@ function filterRecent() {
   renderGrid();
 }
 
+function filterFavorites() {
+  closeSidebar();
+  activeFavorites = true;
+  activeRecent = false;
+  activeCompany = null;
+  activeType = null;
+  activeYear = null;
+  searchQuery = '';
+  document.getElementById('search').value = '';
+  buildSidebar();
+  document.getElementById('crumb-sep').style.display = '';
+  document.getElementById('crumb-company').textContent = 'Favoritos';
+  document.querySelectorAll('.type-pill, .year-pill').forEach(p => p.classList.remove('active'));
+  renderGrid();
+}
+
 function filterCompany(company) {
   closeSidebar();
   activeRecent  = false;
+  activeFavorites = false;
   activeCompany = company;
   buildSidebar();
 
@@ -2337,7 +2450,7 @@ function filterCompany(company) {
 }
 
 function isDefaultHomepageFilter() {
-  return !activeRecent && !activeCompany && !activeType && !activeYear && !searchQuery;
+  return !activeRecent && !activeFavorites && !activeCompany && !activeType && !activeYear && !searchQuery;
 }
 
 function isHomepageRecentPreview() {
@@ -2366,6 +2479,9 @@ function getFilteredProjects() {
     projects = projects.filter(p =>
       p.name.toLowerCase().includes(q) || p.company.toLowerCase().includes(q)
     );
+  }
+  if (activeFavorites) {
+    projects = projects.filter(p => isFavoriteProject(p));
   }
 
   // Sort
@@ -2408,9 +2524,11 @@ function renderGrid() {
   const count = document.getElementById('result-count');
 
   const projects = getFilteredProjects();
-  count.textContent = isHomepageRecentPreview()
-    ? `${projects.length} proyectos recientes`
-    : `${projects.length} proyecto${projects.length !== 1 ? 's' : ''}`;
+  count.textContent = activeFavorites
+    ? `${projects.length} favorito${projects.length !== 1 ? 's' : ''}`
+    : isHomepageRecentPreview()
+      ? `${projects.length} proyectos recientes`
+      : `${projects.length} proyecto${projects.length !== 1 ? 's' : ''}`;
   grid.className = galleryView === 'normal' ? '' : `view-${galleryView}`;
 
   if (!projects.length) {
@@ -2451,12 +2569,14 @@ function createCard(project) {
   const cutoff7 = new Date();
   cutoff7.setDate(cutoff7.getDate() - 7);
   const isNew = project.date && project.date >= cutoff7.toISOString().slice(0, 10);
+  const favoriteActive = isFavoriteProject(project);
 
   card.innerHTML = `
     <div class="card-thumb">
       <div class="placeholder"></div>
       <img data-src="${thumbCover}" alt="${project.name}"
            onload="this.classList.add('loaded'); this.previousElementSibling.style.display='none'">
+      <button class="card-fav-btn${favoriteActive ? ' active' : ''}" type="button" aria-label="${favoriteActive ? 'Quitar de favoritos' : 'Añadir a favoritos'}" title="${favoriteActive ? 'Quitar de favoritos' : 'Añadir a favoritos'}">★</button>
       <span class="img-count">${latestCount} renders${hasMultiple ? ' · ' + versionCount + ' vers.' : ''}${finalCount ? ' · ' + finalCount + ' fotos' : ''}</span>
       ${finalCount ? '<span class="final-photo-badge">Fotos finales</span>' : ''}
       ${isNew ? '<span class="new-badge">Nuevo</span>' : ''}
@@ -2465,6 +2585,14 @@ function createCard(project) {
       <div class="card-name">${cleanProjectName(project.name)}</div>
       </div>
     </div>`;
+  const favoriteBtn = card.querySelector('.card-fav-btn');
+  if (favoriteBtn) {
+    favoriteBtn.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleFavorite(project, favoriteBtn);
+    };
+  }
   return card;
 }
 

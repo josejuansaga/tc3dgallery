@@ -32,6 +32,7 @@ SHARED_LINKS_FILE = os.path.join(GALLERY_DIR, 'shared_links.json')
 ROTATIONS_FILE = os.path.join(GALLERY_DIR, 'image_rotations.json')
 PROJECT_BILLING_FILE = os.path.join(GALLERY_DIR, 'project_billing.json')
 SOCIAL_VISIBILITY_FILE = os.path.join(GALLERY_DIR, 'social_visibility.json')
+FAVORITES_FILE = os.path.join(GALLERY_DIR, 'favorites.json')
 THUMB_DIR  = os.path.join(GALLERY_DIR, 'thumbs')
 _sessions      = {}   # token → {username, role, expires}
 _gallery_cache = {'data': None, 'mtime': 0}
@@ -273,6 +274,55 @@ def save_social_visibility(data):
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(cleaned, f, ensure_ascii=False, indent=2)
     os.replace(tmp, SOCIAL_VISIBILITY_FILE)
+
+def favorite_key(company, project_name):
+    return f'{company}||{project_name}'
+
+def load_favorites():
+    try:
+        with open(FAVORITES_FILE, encoding='utf-8') as f:
+            raw = json.load(f)
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    cleaned = {}
+    for username, entries in raw.items():
+        if not isinstance(entries, list):
+            continue
+        unique = []
+        seen = set()
+        for entry in entries:
+            entry = str(entry).strip()
+            if not entry or entry in seen:
+                continue
+            seen.add(entry)
+            unique.append(entry)
+        cleaned[str(username).strip()] = unique
+    return cleaned
+
+def save_favorites(data):
+    tmp = FAVORITES_FILE + '.tmp'
+    cleaned = {}
+    for username, entries in data.items():
+        username = str(username).strip()
+        if not username:
+            continue
+        unique = []
+        seen = set()
+        for entry in entries if isinstance(entries, list) else []:
+            entry = str(entry).strip()
+            if not entry or entry in seen:
+                continue
+            seen.add(entry)
+            unique.append(entry)
+        cleaned[username] = unique
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(cleaned, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, FAVORITES_FILE)
+
+def favorites_for_user(username):
+    return load_favorites().get(username, [])
 
 def billing_key(company, project_name):
     return f'{company}||{project_name}'
@@ -1634,6 +1684,35 @@ class Handler(SimpleHTTPRequestHandler):
             'window.location.replace("/login");\n'
         )
 
+    def _serve_favorites(self, sess):
+        self._json({'favorites': favorites_for_user(sess.get('username', ''))})
+
+    def _toggle_favorite(self, sess):
+        length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(length) or b'{}')
+        company = str(body.get('company', '')).strip()
+        project_name = str(body.get('project', '')).strip()
+        if not company or not project_name:
+            self._json({'error': 'Faltan datos del proyecto'}, 400)
+            return
+        project = find_project_for_user(sess.get('username', ''), company, project_name)
+        if not project:
+            self._json({'error': 'Proyecto no encontrado'}, 404)
+            return
+        favorites = load_favorites()
+        username = sess.get('username', '')
+        current = favorites.get(username, [])
+        key = favorite_key(company, project_name)
+        if key in current:
+            current = [entry for entry in current if entry != key]
+            favorited = False
+        else:
+            current = current + [key]
+            favorited = True
+        favorites[username] = current
+        save_favorites(favorites)
+        self._json({'ok': True, 'favorited': favorited, 'favorites': current})
+
     def _require_admin(self, sess):
         if sess.get('role') != 'admin':
             self._json({'error': 'No autorizado'}, 403)
@@ -2197,6 +2276,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             self._json(admin_payload())
             return
+        if self.path == '/api/favorites':
+            self._serve_favorites(sess)
+            return
         if parsed.path == '/api/project-detail':
             params = parse_qs(parsed.query)
             company = str(params.get('company', [''])[0]).strip()
@@ -2273,6 +2355,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.path == '/api/rotate-image':
             self._handle_gallery_rotate(sess)
+            return
+        if self.path == '/api/favorite-toggle':
+            self._toggle_favorite(sess)
             return
         if self.path == '/api/admin/create-instagram-pack':
             self._admin_create_instagram_pack(sess)
