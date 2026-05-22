@@ -2325,6 +2325,17 @@ window.addEventListener('DOMContentLoaded', async () => {
 function buildSidebar() {
   const list = document.getElementById('company-list');
   list.innerHTML = '';
+  const q = searchQuery.toLowerCase();
+  const visibleCompanies = GALLERY_DATA.map(company => {
+    const matchingProjects = company.projects.filter(project =>
+      !q || company.company.toLowerCase().includes(q) || project.name.toLowerCase().includes(q)
+    );
+    return {
+      company: company.company,
+      count: matchingProjects.length,
+      visible: matchingProjects.length > 0
+    };
+  }).filter(item => item.visible);
 
   const favoriteCount = countFavoriteProjects();
   const favoriteBtn = document.createElement('button');
@@ -2346,15 +2357,17 @@ function buildSidebar() {
   // All button
   const allBtn = document.createElement('button');
   allBtn.className = 'company-btn' + (!activeCompany && !activeRecent && !activeFavorites ? ' active' : '');
-  const totalP = GALLERY_DATA.reduce((s, c) => s + c.projects.length, 0);
+  const totalP = searchQuery
+    ? visibleCompanies.reduce((sum, company) => sum + company.count, 0)
+    : GALLERY_DATA.reduce((s, c) => s + c.projects.length, 0);
   allBtn.innerHTML = `<span class="name">Todos los proyectos</span><span class="count">${totalP}</span>`;
   allBtn.onclick = () => filterCompany(null);
   list.appendChild(allBtn);
 
-  GALLERY_DATA.forEach(company => {
+  visibleCompanies.forEach(company => {
     const btn = document.createElement('button');
     btn.className = 'company-btn' + (activeCompany === company.company ? ' active' : '');
-    btn.innerHTML = `<span class="name">${company.company}</span><span class="count">${company.projects.length}</span>`;
+    btn.innerHTML = `<span class="name">${company.company}</span><span class="count">${company.count}</span>`;
     btn.onclick = () => filterCompany(company.company);
     list.appendChild(btn);
   });
@@ -3099,6 +3112,7 @@ function setupSearch() {
   const input = document.getElementById('search');
   input.addEventListener('input', () => {
     searchQuery = input.value.trim();
+    buildSidebar();
     renderGrid();
   });
 }
