@@ -683,7 +683,14 @@
     justify-content: center;
     cursor: pointer;
     backdrop-filter: blur(8px);
-    transition: transform .18s, border-color .18s, background .18s, color .18s;
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .18s, border-color .18s, background .18s, color .18s, opacity .18s;
+  }
+  .project-card:hover .card-fav-btn,
+  .project-card:focus-within .card-fav-btn {
+    opacity: 1;
+    pointer-events: auto;
   }
   .card-fav-btn:hover {
     transform: scale(1.06);
@@ -694,6 +701,12 @@
     background: rgba(185,154,88,.22);
     border-color: rgba(185,154,88,.72);
     color: #f7d36b;
+  }
+  @media (hover: none) {
+    .card-fav-btn {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
   .card-info {
@@ -3084,13 +3097,9 @@ async function rotateGalleryImage(delta) {
 // ── Search ───────────────────────────────────────────────────────────────
 function setupSearch() {
   const input = document.getElementById('search');
-  let timer;
   input.addEventListener('input', () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      searchQuery = input.value.trim();
-      renderGrid();
-    }, 200);
+    searchQuery = input.value.trim();
+    renderGrid();
   });
 }
 
